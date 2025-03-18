@@ -5,9 +5,14 @@ from flask_limiter.util import get_remote_address
 import time
 import random
 import os
+import logging
 
 app = Flask(__name__)
-limiter = Limiter(app=app, key_func=get_remote_address)
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["10 per minute"])
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def scrape_google_maps(keyword):
     try:
@@ -15,11 +20,12 @@ def scrape_google_maps(keyword):
             proxy = os.getenv("PROXY")
             browser_args = {
                 "headless": True,
-                "args": ["--disable-gpu", "--no-sandbox"]  # Reduce memory usage
+                "args": ["--disable-gpu", "--no-sandbox"]
             }
             if proxy:
                 browser_args["proxy"] = {"server": proxy}
 
+            logger.info("Launching browser")
             browser = p.chromium.launch(**browser_args)
             page = browser.new_page()
 
@@ -27,9 +33,11 @@ def scrape_google_maps(keyword):
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
             })
 
-            page.goto("https://www.google.com/maps", timeout=60000)
-            page.wait_for_load_state("networkidle")
+            logger.info("Navigating to Google Maps")
+            page.goto("https://www.google.com/maps", timeout=60000)  # 60s timeout
+            page.wait_for_load_state("networkidle", timeout=60000)
 
+            logger.info("Searching for keyword")
             search_box = page.query_selector('input#searchboxinput')
             if not search_box:
                 browser.close()
@@ -37,16 +45,18 @@ def scrape_google_maps(keyword):
             search_box.type(keyword)
             page.query_selector('button#searchbox-searchbutton').click()
 
-            page.wait_for_selector('.section-result', timeout=15000)
+            logger.info("Waiting for results")
+            page.wait_for_selector('.section-result', timeout=60000)  # 60s timeout
 
             businesses = []
-            scroll_attempts = 1  # Reduce to 1 to lower memory and time
-            for _ in range(scroll_attempts):
+            scroll_attempts = 0  # Disable scrolling for now to reduce time
+            for _ in range(scroll_attempts + 1):  # Run once without scrolling
                 results = page.query_selector_all('.section-result')
+                logger.info(f"Found {len(results)} results")
                 for result in results:
                     try:
                         result.click()
-                        page.wait_for_timeout(500)  # Reduce wait time
+                        page.wait_for_timeout(300)  # Reduced from 500ms
 
                         name = page.query_selector('.x3AX1-LfntMc-header-title-text') or "N/A"
                         address = page.query_selector('.Io6YTe') or "N/A"
@@ -60,14 +70,17 @@ def scrape_google_maps(keyword):
                             "website": website.inner_text() if website != "N/A" else "N/A"
                         })
                     except Exception as e:
-                        print(f"Error scraping business: {e}")
+                        logger.error(f"Error scraping business: {e}")
 
-                page.evaluate("document.querySelector('.section-layout').scrollTop += 1000")
-                time.sleep(random.uniform(1, 2))  # Reduce delay
+                if scroll_attempts > 0:
+                    page.evaluate("document.querySelector('.section-layout').scrollTop += 1000")
+                    time.sleep(random.uniform(1, 2))
 
             browser.close()
+            logger.info(f"Scraped {len(businesses)} businesses")
             return {"businesses": businesses}
     except Exception as e:
+        logger.error(f"Scraping failed: {str(e)}")
         return {"error": f"Scraping failed: {str(e)}"}
 
 @app.route('/scrape', methods=['GET'])
