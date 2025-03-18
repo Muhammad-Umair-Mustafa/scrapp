@@ -24,39 +24,62 @@ def scrape_google_maps(keyword):
             }
             if proxy:
                 browser_args["proxy"] = {"server": proxy}
+                logger.info(f"Using proxy: {proxy}")
+            else:
+                logger.warning("No proxy set, Google may block this request")
 
             logger.info("Launching browser")
             browser = p.chromium.launch(**browser_args)
             page = browser.new_page()
 
             page.set_extra_http_headers({
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9"
             })
+            page.set_viewport_size({"width": 1280, "height": 720})
 
             logger.info("Navigating to Google Maps")
-            page.goto("https://www.google.com/maps", timeout=60000)  # 60s timeout
-            page.wait_for_load_state("networkidle", timeout=60000)
+            try:
+                response = page.goto("https://www.google.com/maps", timeout=90000)  # 90s timeout
+                if response.status >= 400:
+                    logger.error(f"HTTP error: {response.status}")
+                    browser.close()
+                    return {"error": f"HTTP error {response.status} - possible block or CAPTCHA"}
+            except Exception as e:
+                logger.error(f"Failed to load Google Maps: {str(e)}")
+                browser.close()
+                return {"error": f"Failed to load Google Maps: {str(e)}"}
+
+            logger.info("Waiting for network idle")
+            page.wait_for_load_state("networkidle", timeout=90000)
+
+            # Check for CAPTCHA or block page
+            if "sorry" in page.url.lower() or "captcha" in page.url.lower():
+                logger.error("Google CAPTCHA or block detected")
+                browser.close()
+                return {"error": "Google CAPTCHA or block detected"}
 
             logger.info("Searching for keyword")
             search_box = page.query_selector('input#searchboxinput')
             if not search_box:
+                logger.error("Search box not found")
                 browser.close()
                 return {"error": "Search box not found on Google Maps"}
             search_box.type(keyword)
             page.query_selector('button#searchbox-searchbutton').click()
 
             logger.info("Waiting for results")
-            page.wait_for_selector('.section-result', timeout=60000)  # 60s timeout
+            page.wait_for_selector('.section-result', timeout=90000)
 
             businesses = []
-            scroll_attempts = 0  # Disable scrolling for now to reduce time
-            for _ in range(scroll_attempts + 1):  # Run once without scrolling
+            scroll_attempts = 0
+            for _ in range(scroll_attempts + 1):
                 results = page.query_selector_all('.section-result')
                 logger.info(f"Found {len(results)} results")
                 for result in results:
                     try:
                         result.click()
-                        page.wait_for_timeout(300)  # Reduced from 500ms
+                        page.wait_for_timeout(300)
 
                         name = page.query_selector('.x3AX1-LfntMc-header-title-text') or "N/A"
                         address = page.query_selector('.Io6YTe') or "N/A"
