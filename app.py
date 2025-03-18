@@ -13,7 +13,10 @@ def scrape_google_maps(keyword):
     try:
         with sync_playwright() as p:
             proxy = os.getenv("PROXY")
-            browser_args = {"headless": True}
+            browser_args = {
+                "headless": True,
+                "args": ["--disable-gpu", "--no-sandbox"]  # Reduce memory usage
+            }
             if proxy:
                 browser_args["proxy"] = {"server": proxy}
 
@@ -37,13 +40,13 @@ def scrape_google_maps(keyword):
             page.wait_for_selector('.section-result', timeout=15000)
 
             businesses = []
-            scroll_attempts = 3
+            scroll_attempts = 1  # Reduce to 1 to lower memory and time
             for _ in range(scroll_attempts):
                 results = page.query_selector_all('.section-result')
                 for result in results:
                     try:
                         result.click()
-                        page.wait_for_timeout(1000)
+                        page.wait_for_timeout(500)  # Reduce wait time
 
                         name = page.query_selector('.x3AX1-LfntMc-header-title-text') or "N/A"
                         address = page.query_selector('.Io6YTe') or "N/A"
@@ -60,7 +63,7 @@ def scrape_google_maps(keyword):
                         print(f"Error scraping business: {e}")
 
                 page.evaluate("document.querySelector('.section-layout').scrollTop += 1000")
-                time.sleep(random.uniform(2, 4))
+                time.sleep(random.uniform(1, 2))  # Reduce delay
 
             browser.close()
             return {"businesses": businesses}
@@ -76,6 +79,10 @@ def scrape_businesses():
 
     data = scrape_google_maps(keyword)
     return jsonify(data)
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok"}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
