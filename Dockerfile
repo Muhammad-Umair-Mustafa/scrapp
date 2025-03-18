@@ -1,10 +1,7 @@
-# Use an official Python runtime as the base image
 FROM python:3.9-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies required by Playwright
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libatk1.0-0 \
@@ -20,20 +17,13 @@ RUN apt-get update && apt-get install -y \
     libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright browsers
 RUN playwright install --with-deps
 
-# Copy the application code
 COPY . .
 
-# Expose the port Render will use
 EXPOSE 5000
 
-# Run the app with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+# Increase Gunicorn timeout to 120 seconds
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
