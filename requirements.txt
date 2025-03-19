@@ -1,4 +1,7 @@
-flask
+fastapi
+uvicorn
+httpx
+beautifulsoup4
 playwright
-flask-limiter
-gunicorn
+reppy
+slowapi
