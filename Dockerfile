@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM python:3.9-bullseye
 
 # Install system dependencies for Playwright
 RUN apt-get update && apt-get install -y \
@@ -32,6 +32,8 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libappindicator3-1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Continue with your application setup...
 
 # Install Python dependencies
 COPY requirements.txt .
