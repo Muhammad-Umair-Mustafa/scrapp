@@ -1,6 +1,7 @@
+# Use Python 3.9 based on Debian Bullseye
 FROM python:3.9-bullseye
 
-# Install system dependencies for Playwright
+# Install system dependencies required by Playwright
 RUN apt-get update && apt-get install -y \
     libwoff1 \
     libopus0 \
@@ -33,8 +34,6 @@ RUN apt-get update && apt-get install -y \
     libappindicator3-1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Continue with your application setup...
-
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -44,5 +43,5 @@ RUN playwright install  # Install Playwright browsers
 COPY . /app
 WORKDIR /app
 
-# Run the API
+# Run the API with Uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
